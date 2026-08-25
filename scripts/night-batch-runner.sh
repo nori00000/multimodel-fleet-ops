@@ -5,6 +5,7 @@
 # NIGHT_BATCH_FORCE=1 = 창 밖 수동 테스트
 set -u
 BASE="$HOME/night-batch"
+mkdir -p "$BASE"/{queue,running,work,done,failed,logs}   # 클린 설치에서도 시작 가능 (크리틱 #1)
 LOG="$BASE/logs/run-$(date +%Y%m%d-%H%M%S).log"
 LOCK="$BASE/.runner.lock"
 OPENCODE="$HOME/.opencode/bin/opencode"
@@ -32,7 +33,7 @@ secs_until_cutoff() {
 in_window() {
   [[ "${NIGHT_BATCH_FORCE:-0}" == "1" ]] && return 0
   local h=$(date +%H)
-  [[ "$h" == "23" || "$h" < "06" ]] || return 1
+  (( 10#$h == 23 || 10#$h < 6 )) || return 1   # 산술 비교 (shellcheck SC2071)
   [[ $(secs_until_cutoff) -gt 0 ]]
 }
 
@@ -91,10 +92,10 @@ run_job() {  # $1=지시서(running 경로) $2=job이름
   local fetch_args=() furl fi=0
   while IFS= read -r furl; do
     furl=$(echo "$furl" | sed 's/^fetch: *//' | tr -d '[:space:]')
-    [[ "$furl" =~ ^https?:// ]] || continue
+    [[ "$furl" =~ ^https:// ]] || continue   # https 전용 (SSRF 표면 축소 — 사설IP 검증은 백로그)
     (( fi >= 8 )) && { log "$name: fetch 상한(8) 초과 — 이후 URL 생략"; break; }
     fi=$((fi+1))
-    if curl -sL --max-time 45 --max-filesize 3000000 -A "Mozilla/5.0" "$furl" -o "$work/fetched-$fi.html" 2>/dev/null && [[ -s "$work/fetched-$fi.html" ]]; then
+    if curl -sL --fail --proto '=https' --proto-redir '=https' --max-time 45 --max-filesize 3000000 -A "Mozilla/5.0" "$furl" -o "$work/fetched-$fi.html" 2>/dev/null && [[ -s "$work/fetched-$fi.html" ]]; then
       printf '<!-- source: %s -->\n' "$furl" | cat - "$work/fetched-$fi.html" > "$work/fetched-$fi.tmp" && mv "$work/fetched-$fi.tmp" "$work/fetched-$fi.html"
       fetch_args+=(-f "$work/fetched-$fi.html")
       log "$name: fetch OK [$fi] $furl ($(wc -c < "$work/fetched-$fi.html")B)"

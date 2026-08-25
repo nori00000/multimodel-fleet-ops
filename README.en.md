@@ -1,38 +1,53 @@
 # Multi-Model Fleet Ops
 
-**A solo operator's system for commanding a fleet of AI models** — model routing × graceful degradation × failover/failback.
+**A practical playbook for routing work across multiple AI subscriptions** — model routing × graceful degradation × failover/failback, for solo operators.
 
-If you run multiple AI subscriptions (Claude, ChatGPT/Codex, budget model plans), you know the pattern:
-top-model tokens refill on Monday, run dry by Thursday, and you limp through the rest of the week on
-fallback models — or stop working entirely. This repo is a field-tested operating system for that problem.
+If you run several AI subscriptions (Claude, ChatGPT/Codex, budget model plans), you may know the pattern:
+a premium-model quota refills, gets exhausted early in the cycle, and the remaining work continues on
+lower-capability fallback models. This repo documents a personal operating playbook and experimental
+macOS scripts for that problem.
+
+## Status and limitations (read first)
+
+- **Experimental personal prototype.** macOS-only scripts; requires local opencode CLI and provider
+  authentication. The quota collector depends on per-subscription usage CLIs (treat it as an example).
+- The exhaustion ladder's descent/failback is **largely a manual operating policy** — the quota hook
+  displays recommendations; it does not enforce a state machine.
+- Night-batch outputs are **untrusted until human review**. The no-tools agent blocks tool-mediated
+  side effects but does **not** protect output integrity against injected content.
+- No OS sandbox, cost circuit breaker, or automated promotion gate yet (see per-doc backlogs).
+- The fault-injection result (11/11 detection) is an observation from **two small, verification-explicit
+  internal trials** — not a production recall estimate.
 
 ## Core ideas
 
 1. **The Exhaustion Ladder** — token exhaustion as a *designed state transition*, not an accident.
-   Five rungs from "normal" through "conservation mode" and "succession" down to a self-organizing
-   budget stack, with explicit failback rules (one rung at a time; first judgment after recovery is
-   a spot-check of fallback-era output). See [docs/exhaustion-ladder.md](docs/exhaustion-ladder.md).
-2. **Task-type routing** — the judgment model commands; execution, verification, and mechanical work
-   go to type-matched lanes. Key insight: papers warn multi-agent systems cost ~15× tokens, but that
-   assumes one vendor's budget — with multiple subscriptions, the only real bottleneck is your top
-   model's quota. See [docs/routing.md](docs/routing.md).
-3. **Cross-family critique** — work products are reviewed by a *different vendor's* model, always.
-   Same-family models share blind spots (self-preference bias). We measured this with blind
-   fault-injection: 2 rounds, 11 planted faults, 3 verifier models, 100% recall, zero false alarms —
-   plus real propagated errors the gate caught that we hadn't planted. See [docs/fault-injection.md](docs/fault-injection.md).
-4. **Night batch** — idle budget-model quota works while you sleep, behind a *capability boundary*
-   (a no-tools agent: "available tools: none") rather than policy text. Web material is fetched
-   deterministically by the runner and attached as data. See [docs/night-batch.md](docs/night-batch.md).
+   Five rungs from normal operation through conservation mode and succession down to a predefined
+   budget-model fallback stack, with explicit failback rules (one rung at a time; the first judgment
+   after recovery is a spot-check of outputs produced during fallback operation).
+   See [docs/exhaustion-ladder.md](docs/exhaustion-ladder.md) (Korean).
+2. **Task-type routing** — a higher-capability model handles planning and routing; execution,
+   verification, and mechanical work go to type-matched lanes. With separate subscription quotas,
+   the immediate constraint tends to shift from aggregate tokens toward the scarce judgment-model
+   quota — though latency, review capacity, and integration costs still apply.
+   See [docs/routing.md](docs/routing.md).
+3. **Cross-family review (an operational heuristic)** — for oracle-free review of work products we
+   prefer a different vendor's model, motivated by self-preference-bias research. Our fault-injection
+   exercise tested *fact verification with an oracle* (where family didn't matter), not this
+   hypothesis itself. See [docs/fault-injection.md](docs/fault-injection.md).
+4. **Night batch** — idle budget-model quota works while you sleep, behind a capability boundary
+   (a tools-disabled agent) rather than policy text. Web material is fetched by the non-LLM runner
+   (https-only) and attached as data. See [docs/night-batch.md](docs/night-batch.md).
 
 ## What's here
 
-- `docs/` — the four design documents above + [verified evidence list](docs/evidence.md)
-- `scripts/` — working night-batch runner, quota-status session hook, quota collector (macOS)
-- `agent/` — the no-tools opencode agent definition
-- `examples/` — a sample night job + launchd template
+- `docs/` — design documents + [reference list](docs/evidence.md) (link-existence checked)
+- `scripts/` — night-batch runner, quota-status session hook, quota collector (macOS)
+- `agent/` — the tools-disabled opencode agent definition (install to `~/.config/opencode/agent/`)
+- `examples/` — a sample night job + launchd template; see README.md for install steps
 
-Everything in this repo survived adversarial cross-model critique (77 findings converged across
-two review rounds) — the system was built by the method it describes.
+The current draft was revised after two cross-model adversarial review rounds; unresolved controls
+are listed in the backlogs.
 
 한국어 문서: [README.md](README.md)
 
