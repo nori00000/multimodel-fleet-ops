@@ -132,10 +132,26 @@ run_job() {  # $1=지시서(running 경로) $2=job이름
     "$name" "$lane" "$rc" "$dur" "$eff_to" "$(date '+%F %T')" "$(shasum -a 256 "$run_file" | cut -c1-16)" > "$work/meta.json"
   mv "$run_file" "$work/instruction.md"
   if [[ $rc -eq 0 && -s "$work/out.md" ]]; then
-    mv "$work" "$BASE/done/$name"; log "완료 $name (${dur}s)"
+    promote_work "$work" done "$name" || { log "FATAL: 완료 결과 승격 실패 $name"; return 1; }
+    log "완료 $(basename "$PROMOTED_PATH") (${dur}s)"
   else
-    mv "$work" "$BASE/failed/$name"; log "실패 $name exit=$rc (${dur}s)"
+    promote_work "$work" failed "$name" || { log "FATAL: 실패 결과 승격 실패 $name"; return 1; }
+    log "실패 $(basename "$PROMOTED_PATH") exit=$rc (${dur}s)"
   fi
+}
+
+# 이미 같은 이름의 결과가 있으면, 기존 결과의 하위 디렉터리로 mv하지 않는다.
+# 러너는 singleton이므로 같은 상태에서 name, name-2, name-3 ... 순으로 고르는 것이
+# 결정론적이며, 각 결과는 done/ 또는 failed/ 바로 아래의 독립 sibling으로 유지된다.
+promote_work() {  # $1=work 경로 $2=done|failed $3=job 이름
+  local work_dir="$1" outcome="$2" job_name="$3" candidate suffix=2
+  candidate="$BASE/$outcome/$job_name"
+  while [[ -e "$candidate" ]]; do
+    candidate="$BASE/$outcome/$job_name-$suffix"
+    suffix=$((suffix + 1))
+  done
+  mv "$work_dir" "$candidate" || return 1
+  PROMOTED_PATH="$candidate"
 }
 
 count=0
